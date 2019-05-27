@@ -20,7 +20,7 @@ def spark_session():
     return spark
 
 
-def load_dim_tables(path):
+def load_dim_tables(path, spark):
     """
     *** Code for DIM_US_CITY table. ***
     """
@@ -45,13 +45,82 @@ def load_dim_tables(path):
     # create a state and city variable for dim_city_temp table
     state_city = df[['state_prefix', 'City']].drop_duplicates().values.tolist()
 
-    return state_city
+    """
+    *** Code for DIM_CITY_TEMP table. ***
+    """
+
+    # list of cities of US based on a dictionary of main dataset source
+    df_cities = pd.read_csv(main_path + "historical-hourly-weather-data/city_attributes.csv")
+    us_cities = df_cities[df_cities.Country == "United States"]["City"].values.tolist()
+
+    # Spark DataFrame for dim table, select columns based on us_cities list created before.
+    path_temp = main_path + "historical-hourly-weather-data/temperature.csv"
+    df = spark.read.format("csv").option("header", "true").load(path_temp)
+    df_city = df.select('datetime', *us_cities)
+
+    # Unpivot DataFrame
+    df_newColumn = df_city.toDF(*[column.replace(" ", "") for column in df_city.columns])
+    stack_statement = "stack(27, 'Portland', Portland, 'SanFrancisco', SanFrancisco, 'Seattle', Seattle, 'LosAngeles', LosAngeles, 'SanDiego', SanDiego, 'LasVegas', LasVegas, 'Phoenix', Phoenix, 'Albuquerque', Albuquerque, 'Denver', Denver, 'SanAntonio', SanAntonio, 'Dallas', Dallas, 'Houston', Houston, 'KansasCity', KansasCity, 'Minneapolis', Minneapolis, 'SaintLouis', SaintLouis, 'Chicago', Chicago, 'Nashville', Nashville, 'Indianapolis', Indianapolis, 'Atlanta', Atlanta, 'Detroit', Detroit, 'Jacksonville', Jacksonville, 'Charlotte', Charlotte, 'Miami', Miami, 'Pittsburgh', Pittsburgh, 'Philadelphia', Philadelphia, 'NewYork', NewYork, 'Boston', Boston) as (City, Temp)"
+
+    df_weather = df_newColumn.selectExpr("Datetime", stack_statement).where("Temp is not null")
+
+    # Change dateformat for Datetime column and order dataframe by datetime and city.
+    datetime_udf = udf(lambda x: parse(x), T.DateType())
+
+    df_weatherdate = df_weather.withColumn("Datetime", datetime_udf(df_weather.Datetime))\
+        .orderBy("Datetime", "City")
+
+    # Avg temperature column by datetime and city.
+    df_avg_weather = df_weatherDate.groupBy("Datetime", "City").agg({"Temp": "avg"})
+
+    # Return name of cities to normal (spaces between words)
+    replace_cities = {
+        'SanFrancisco': 'San Francisco',
+        'LosAngeles': 'Los Angeles',
+        'SanDiego': 'San Diego',
+        'LasVegas': 'Las Vegas',
+        'SanAntonio': 'San Antonio',
+        'KansasCity': 'Kansas City',
+        'SaintLouis': 'Saint Louis',
+        'NewYork': 'New York',
+    }
+
+    @udf
+    def replace_city(name):
+        for key, value in replace_cities.items():
+            if name == key:
+                return value
+        return name
+
+    df_weatherReplace = df_avg_weather.withColumn("City", replace_city(df_avg_weather.City))
+
+    # Add state prefix column
+    @udf
+    def state(name):
+        for value in state_city:
+            if name == value[1]:
+                return value[0]  # value[0] is equal to state prefix
+        return None  # if there's no match for City return None
+
+    df_weatherState = df_weatherReplace.withColumn("State", state(df_weatherReplace.City))
+
+    # change temperature measurement from Kelvin to Fahrenheit
+    fahrenheit_udf = F.udf(lambda x: '%.3f' % ((x - 273.15) * 1.8000 + 32.00)
+                           )  # return a three decimal float number
+
+    df_weatherFahrenheit = df_weatherState.withColumnRenamed(
+        "avg(Temp)", "Temp").withColumn("Temp", fahrenheit_udf(df_weatherState.Temp))
+
+    # Write parquet files
+    df_weatherFahrenheit.write.partitionBy("State").parquet("weather.parquet")
 
 
 def main():
 
     main_path = os.getcwd() + "/datasets/"
-    load_dim_tables(main_path)
+
+    spark = spark_session()
+    load_dim_tables(main_path, spark)
 
 
 if __name__ == '__main__':
