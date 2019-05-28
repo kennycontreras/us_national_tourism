@@ -114,6 +114,24 @@ def load_dim_tables(path, spark):
     # Write parquet files
     df_weatherFahrenheit.write.partitionBy("State").parquet("weather.parquet")
 
+    """
+    *** Code for DIM_AIRPORT table. ***
+    """
+
+    airport_path = path + "airport-codes_csv.csv"
+    df = spark.read.format("csv").option("header", "true").load(
+        os.getcwd() + "/datasets/airport-codes_csv.csv")
+
+    # filter dataset by country (US) and municipality not null
+    df_airport = df.filter('iso_country = "US" and municipality is not null').select(
+        'ident', 'type', 'name', 'iso_country', 'iso_region', 'municipality')
+
+    # create state column using iso_region column
+    udf_state = udf(lambda x: x[3::])
+
+    df_airport_state = df_airport.withColumnRenamed("iso_region", "state")\
+        .withColumn("state", udf_state(df_airport.state))
+
 
 def main():
 
