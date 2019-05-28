@@ -7,6 +7,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import types as T
 from pyspark.sql.functions import udf
 from datasets.data import Data
+from datetime import datetime
 
 
 def spark_session():
@@ -138,6 +139,48 @@ def load_dim_tables(path, spark):
     columns = ['id_country', 'country']
     df_country = pd.DataFrame([(key, value)
                                for key, value in Data.countries.items()], columns=columns)
+
+
+def load_fact_table(path, spark):
+
+    df = spark.read.parquet("sas_data")
+
+    # change arrdate and depdate columns to datetype
+    epoch = datetime(1960, 1, 1)
+    sas_day = udf(lambda x: (timedelta(days=int(x)) + epoch) if x else None, T.DateType())
+    df_dateParse = df.withColumn("arrdate", sas_day(df.arrdate))
+    df_dateParse2 = df_dateParse.withColumn("depdate", sas_day(df_dateParse.depdate))
+
+    # change dtaddto column to date if value if valid else return None
+    def char_date(string):
+        try:
+            return datetime.strptime(str(sas), "%m%d%Y")
+        except:
+            return None
+
+    udf_charDate = udf(char_date, T.DateType())
+    df_charDate = df_dateParse2.withColumn("dtaddto", udf_charDate(df_dateParse2.dtaddto))
+
+    # change double columns to IntegerType()
+    to_int = F.udf(lambda x: int(x), T.IntegerType())
+    columns = ['cicid', 'i94yr', 'i94mon', 'i94cit', 'i94res', 'i94port', 'i94mode', 'arrdate',
+               'depdate', 'dtaddto', 'i94addr', 'biryear', 'i94bir', 'gender', 'i94visa', 'visatype', 'airline']
+
+    df_immigration = df_charDate.withColumn("cicid", to_int(df_charDate.cicid))\
+        .withColumn("i94yr", to_int(df_charDate.i94yr))\
+        .withColumn("i94mon", to_int(df_charDate.i94mon))\
+        .withColumn("i94cit", to_int(df_charDate.i94cit))\
+        .withColumn("i94res", to_int(df_charDate.i94res))\
+        .withColumn("i94mode", to_int(df_charDate.i94mode))\
+        .withColumn("biryear", to_int(df_charDate.biryear))\
+        .withColumn("i94bir", to_int(df_charDate.i94bir))\
+        .withColumn("i94visa", to_int(df_charDate.i94visa))\
+        .select(*columns)
+
+    # change name of columns of dataframe
+    new_columns = ['id', 'year', 'month', 'citizen', 'resident', 'port_entry', 'mode_entry', 'arrival_date',
+                   'dep_date', 'dateadd_to', 'state_addr', 'birth_year', 'age', 'gender', 'visa_code', 'visa_type', 'airline']
+    df_imm = df_immigration.toDF(*new_columns)
 
 
 def main():
