@@ -37,8 +37,7 @@ def load_dim_tables(path, spark):
 
     # add state column
     def state_prefix(name):
-        prefix = next(key for key, value in Data.states.items() if value == name)
-        return prefix
+        return [key for key, value in Data.states.items() if value == name][0]
 
     df_city['state_prefix'] = df_city['State'].apply(lambda x: state_prefix(x))
 
