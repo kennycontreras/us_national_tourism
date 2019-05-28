@@ -132,6 +132,14 @@ def load_dim_tables(path, spark):
     df_airport_state = df_airport.withColumnRenamed("iso_region", "state")\
         .withColumn("state", udf_state(df_airport.state))
 
+    """
+    *** Code for DIM_COUNTRY table. ***
+    """
+
+    columns = ['id_country', 'country']
+    df_country = pd.DataFrame([(key, value)
+                               for key, value in Data.countries.items()], columns=columns)
+
 
 def main():
 
