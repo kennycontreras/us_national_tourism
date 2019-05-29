@@ -9,12 +9,20 @@ from pyspark.sql.functions import udf
 from datasets.data import Data
 from datetime import datetime
 
+# config parser configuration
+config = configparser.ConfigParser()
+config.read_file(open("aws/credentials.cfg"))
+# environ variables
+os.environ['AWS_ACCESS_KEY_ID'] = config['AWS']['AWS_ACCESS_KEY_ID']
+os.environ['AWS_SECRET_ACCESS_KEY'] = config['AWS']['AWS_SECRET_ACCESS_KEY']
+
 
 def spark_session():
 
     spark = SparkSession\
         .builder\
         .config("spark.jars.packages", "saurfang:spark-sas7bdat:2.1.0-s_2.11")\
+        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.5")\
         .enableHiveSupport()\
         .getOrCreate()
 
@@ -189,6 +197,7 @@ def load_fact_table(path, spark):
 def main():
 
     main_path = os.getcwd() + "/datasets/"
+    output_data = "s3a://bucket-etl/"
 
     spark = spark_session()
     load_dim_tables(main_path, spark)
