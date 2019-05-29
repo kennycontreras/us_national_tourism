@@ -1,5 +1,6 @@
 # Don't track content of these folders
 config/
+aws/
 .*
 !/.gitignore
 
@@ -7,7 +8,7 @@ config/
 .cache-StriderKeni
 *.pyc
 *.DS_Store
-dwh_init.cfg
+*.cfg
 
 
 # Compiled source #
