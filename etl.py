@@ -27,23 +27,26 @@ def load_dim_tables(path, spark):
     """
     # dim_us_city table
     us_city_path = path + "us-cities-demographics.csv"
-    df_city = pd.read_csv(us_city_path, delimiter=";")
+    df_city = spark.read.format("csv").option(
+        "header", "true").option("delimiter", ";").load(us_city_path)
 
     # drop duplicates
-    df_city[['City', 'State', 'Male Population',
-             'Female Population', 'Total Population']].drop_duplicates()
+    columns = ['City', 'State', 'Male Population', 'Female Population', 'Total Population']
+    df_city = df_city.select(*columns).dropDuplicates()
 
     # fill NaN values
-    df_city.fillna({'Male Population': 0, 'Female Population': 0}, inplace=True)
+    df_cityFill = df_city.fillna({'Male Population': 0, 'Female Population': 0})
 
     # add state column
+    @udf
     def state_prefix(name):
         return [key for key, value in Data.states.items() if value == name][0]
 
-    df_city['state_prefix'] = df_city['State'].apply(lambda x: state_prefix(x))
+    df_cityState = df_cityFill.withColumn("state_prefix", state_prefix(df_cityFill.State))
 
     # create a state and city variable for dim_city_temp table
-    state_city = df[['state_prefix', 'City']].drop_duplicates().values.tolist()
+    state_city = df_cityState.select("state_prefix", "City").dropDuplicates().rdd.map(
+        lambda x: (x[0], x[1])).collect()
 
     """
     *** Code for DIM_CITY_TEMP table. ***
@@ -189,6 +192,7 @@ def main():
 
     spark = spark_session()
     load_dim_tables(main_path, spark)
+    load_fact_table(main_path, spark)
 
 
 if __name__ == '__main__':
