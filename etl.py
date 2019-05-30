@@ -8,6 +8,7 @@ from pyspark.sql import types as T
 from pyspark.sql.functions import udf
 from datasets.data import Data
 from datetime import datetime
+from datetime import timedelta
 from dateutil.parser import parse
 
 # config parser configuration
@@ -132,8 +133,6 @@ def load_dim_tables(path, spark, output, url_db, properties):
     df_weatherFahrenheit = df_weatherLower.withColumn(
         "avg(temp)", fahrenheit_udf(F.col("avg(temp)")))
 
-    print(df_weatherFahrenheit.columns)
-
     # Write into postgres
     df_weatherFahrenheit.withColumnRenamed("avg(temp)", "temp").write.mode("overwrite").jdbc(
         url=url_db, table="dim_us_weather", properties=properties)
@@ -173,9 +172,9 @@ def load_dim_tables(path, spark, output, url_db, properties):
     df_country.write.mode("overwrite").jdbc(url=url_db, table="dim_country", properties=properties)
 
 
-def load_fact_table(path, spark, output):
+def load_fact_table(path, spark, output, url_db, properties):
 
-    df = spark.read.parquet("sas_data")
+    df = spark.read.parquet(path + "sas_data")
 
     # change arrdate and depdate columns to datetype
     epoch = datetime(1960, 1, 1)
@@ -184,9 +183,9 @@ def load_fact_table(path, spark, output):
     df_dateParse2 = df_dateParse.withColumn("depdate", sas_day(df_dateParse.depdate))
 
     # change dtaddto column to date if value if valid else return None
-    def char_date(string):
+    def char_date(date):
         try:
-            return datetime.strptime(str(sas), "%m%d%Y")
+            return datetime.strptime(str(date), "%m%d%Y")
         except:
             return None
 
@@ -194,7 +193,7 @@ def load_fact_table(path, spark, output):
     df_charDate = df_dateParse2.withColumn("dtaddto", udf_charDate(df_dateParse2.dtaddto))
 
     # change double columns to IntegerType()
-    to_int = F.udf(lambda x: int(x), T.IntegerType())
+    to_int = F.udf(lambda x: int(x) if x else None, T.IntegerType())
     columns = ['cicid', 'i94yr', 'i94mon', 'i94cit', 'i94res', 'i94port', 'i94mode', 'arrdate',
                'depdate', 'dtaddto', 'i94addr', 'biryear', 'i94bir', 'gender', 'i94visa', 'visatype', 'airline']
 
@@ -214,6 +213,9 @@ def load_fact_table(path, spark, output):
                    'dep_date', 'dateadd_to', 'state_addr', 'birth_year', 'age', 'gender', 'visa_code', 'visa_type', 'airline']
     df_imm = df_immigration.toDF(*new_columns)
 
+    # write into postgres
+    df_imm.write.mode("append").jdbc(url=url_db, table="immigration_us", properties=properties)
+
 
 def main():
 
@@ -225,7 +227,7 @@ def main():
 
     spark = spark_session()
     load_dim_tables(main_path, spark, output_data, url_db, properties)
-    # load_fact_table(main_path, spark, output_data)
+    load_fact_table(main_path, spark, output_data, url_db, properties)
 
 
 if __name__ == '__main__':
