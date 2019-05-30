@@ -8,6 +8,7 @@ from pyspark.sql import types as T
 from pyspark.sql.functions import udf
 from datasets.data import Data
 from datetime import datetime
+from dateutil.parser import parse
 
 # config parser configuration
 config = configparser.ConfigParser()
@@ -15,6 +16,7 @@ config.read_file(open("aws/credentials.cfg"))
 # environ variables
 os.environ['AWS_ACCESS_KEY_ID'] = config['AWS']['AWS_ACCESS_KEY_ID']
 os.environ['AWS_SECRET_ACCESS_KEY'] = config['AWS']['AWS_SECRET_ACCESS_KEY']
+os.environ["SPARK_CLASSPATH"] = '~/Documents/jars/postgresql-9.3-1101.jdbc41.jar'
 
 
 def spark_session():
@@ -22,14 +24,13 @@ def spark_session():
     spark = SparkSession\
         .builder\
         .config("spark.jars.packages", "saurfang:spark-sas7bdat:2.1.0-s_2.11")\
-        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.5")\
         .enableHiveSupport()\
         .getOrCreate()
 
     return spark
 
 
-def load_dim_tables(path, spark):
+def load_dim_tables(path, spark, output, url_db, properties):
     """
     *** Code for DIM_US_CITY table. ***
     """
@@ -38,22 +39,27 @@ def load_dim_tables(path, spark):
     df_city = spark.read.format("csv").option(
         "header", "true").option("delimiter", ";").load(us_city_path)
 
-    # drop duplicates
+    # drop duplicates and change name of columns replacing spaces to `_`
     columns = ['City', 'State', 'Male Population', 'Female Population', 'Total Population']
-    df_city = df_city.select(*columns).dropDuplicates()
+    new_columns = [column.replace(" ", "_").lower() for column in columns]
+    df_city = df_city.select(*columns).dropDuplicates().toDF(*new_columns)
 
     # fill NaN values
-    df_cityFill = df_city.fillna({'Male Population': 0, 'Female Population': 0})
+    df_cityFill = df_city.fillna({'male_population': 0, 'female_population': 0})
 
     # add state column
     @udf
     def state_prefix(name):
         return [key for key, value in Data.states.items() if value == name][0]
 
-    df_cityState = df_cityFill.withColumn("state_prefix", state_prefix(df_cityFill.State))
+    df_cityState = df_cityFill.withColumn("state_prefix", state_prefix(df_cityFill.state))
+
+    # write into postgresql
+    df_cityState.write.mode("overwrite").jdbc(
+        url=url_db, table="dim_us_city", properties=properties)
 
     # create a state and city variable for dim_city_temp table
-    state_city = df_cityState.select("state_prefix", "City").dropDuplicates().rdd.map(
+    state_city = df_cityState.select("state_prefix", "city").dropDuplicates().rdd.map(
         lambda x: (x[0], x[1])).collect()
 
     """
@@ -61,11 +67,11 @@ def load_dim_tables(path, spark):
     """
 
     # list of cities of US based on a dictionary of main dataset source
-    df_cities = pd.read_csv(main_path + "historical-hourly-weather-data/city_attributes.csv")
+    df_cities = pd.read_csv(path + "historical-hourly-weather-data/city_attributes.csv")
     us_cities = df_cities[df_cities.Country == "United States"]["City"].values.tolist()
 
     # Spark DataFrame for dim table, select columns based on us_cities list created before.
-    path_temp = main_path + "historical-hourly-weather-data/temperature.csv"
+    path_temp = path + "historical-hourly-weather-data/temperature.csv"
     df = spark.read.format("csv").option("header", "true").load(path_temp)
     df_city = df.select('datetime', *us_cities)
 
@@ -78,11 +84,11 @@ def load_dim_tables(path, spark):
     # Change dateformat for Datetime column and order dataframe by datetime and city.
     datetime_udf = udf(lambda x: parse(x), T.DateType())
 
-    df_weatherdate = df_weather.withColumn("Datetime", datetime_udf(df_weather.Datetime))\
+    df_weatherDate = df_weather.withColumn("Datetime", datetime_udf(df_weather.Datetime))\
         .orderBy("Datetime", "City")
 
     # Avg temperature column by datetime and city.
-    df_avg_weather = df_weatherDate.groupBy("Datetime", "City").agg({"Temp": "avg"})
+    df_weatherAvg = df_weatherDate.groupBy("Datetime", "City").agg({"Temp": "avg"})
 
     # Return name of cities to normal (spaces between words)
     replace_cities = {
@@ -103,7 +109,7 @@ def load_dim_tables(path, spark):
                 return value
         return name
 
-    df_weatherReplace = df_avg_weather.withColumn("City", replace_city(df_avg_weather.City))
+    df_weatherReplace = df_weatherAvg.withColumn("City", replace_city(df_weatherAvg.City))
 
     # Add state prefix column
     @udf
@@ -113,25 +119,31 @@ def load_dim_tables(path, spark):
                 return value[0]  # value[0] is equal to state prefix
         return None  # if there's no match for City return None
 
-    df_weatherState = df_weatherReplace.withColumn("State", state(df_weatherReplace.City))
+    df_weatherState = df_weatherReplace.withColumn("state", state(df_weatherReplace.City))
+
+    # rename and lower columns
+    columns = [column.lower() for column in df_weatherState.columns]
+    df_weatherLower = df_weatherState.toDF(*columns)
 
     # change temperature measurement from Kelvin to Fahrenheit
     fahrenheit_udf = F.udf(lambda x: '%.3f' % ((x - 273.15) * 1.8000 + 32.00)
                            )  # return a three decimal float number
 
-    df_weatherFahrenheit = df_weatherState.withColumnRenamed(
-        "avg(Temp)", "Temp").withColumn("Temp", fahrenheit_udf(df_weatherState.Temp))
+    df_weatherFahrenheit = df_weatherLower.withColumn(
+        "avg(temp)", fahrenheit_udf(F.col("avg(temp)")))
 
-    # Write parquet files
-    df_weatherFahrenheit.write.partitionBy("State").parquet("weather.parquet")
+    print(df_weatherFahrenheit.columns)
+
+    # Write into postgres
+    df_weatherFahrenheit.withColumnRenamed("avg(temp)", "temp").write.mode("overwrite").jdbc(
+        url=url_db, table="dim_us_weather", properties=properties)
 
     """
     *** Code for DIM_AIRPORT table. ***
     """
 
     airport_path = path + "airport-codes_csv.csv"
-    df = spark.read.format("csv").option("header", "true").load(
-        os.getcwd() + "/datasets/airport-codes_csv.csv")
+    df = spark.read.format("csv").option("header", "true").load(airport_path)
 
     # filter dataset by country (US) and municipality not null
     df_airport = df.filter('iso_country = "US" and municipality is not null').select(
@@ -140,19 +152,28 @@ def load_dim_tables(path, spark):
     # create state column using iso_region column
     udf_state = udf(lambda x: x[3::])
 
-    df_airport_state = df_airport.withColumnRenamed("iso_region", "state")\
-        .withColumn("state", udf_state(df_airport.state))
+    df_airport_state = df_airport.withColumn("iso_region", udf_state(df_airport.iso_region))
+
+    # change name of columns
+    columns = ['id_airport', 'type', 'name', 'country', 'state', 'city']
+    df_airportNew = df_airport_state.toDF(*columns)
+
+    # write into postgres
+    df_airportNew.write.mode("overwrite").jdbc(
+        url=url_db, table="dim_airport", properties=properties)
 
     """
     *** Code for DIM_COUNTRY table. ***
     """
 
     columns = ['id_country', 'country']
-    df_country = pd.DataFrame([(key, value)
-                               for key, value in Data.countries.items()], columns=columns)
+    df_country = spark.createDataFrame([(key, value)
+                                        for key, value in Data.countries.items()], schema=columns)
+
+    df_country.write.mode("overwrite").jdbc(url=url_db, table="dim_country", properties=properties)
 
 
-def load_fact_table(path, spark):
+def load_fact_table(path, spark, output):
 
     df = spark.read.parquet("sas_data")
 
@@ -197,11 +218,14 @@ def load_fact_table(path, spark):
 def main():
 
     main_path = os.getcwd() + "/datasets/"
-    output_data = "s3a://bucket-etl/"
+    output_data = "s3a://bucket-etl/capstone/"
+
+    url_db = "jdbc:postgresql://127.0.0.1:5432/imm_dwh"
+    properties = {"user": "student", "password": "student", "driver": "org.postgresql.Driver"}
 
     spark = spark_session()
-    load_dim_tables(main_path, spark)
-    load_fact_table(main_path, spark)
+    load_dim_tables(main_path, spark, output_data, url_db, properties)
+    # load_fact_table(main_path, spark, output_data)
 
 
 if __name__ == '__main__':
