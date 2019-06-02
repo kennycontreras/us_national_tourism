@@ -74,7 +74,7 @@ def load_dim_tables(path, spark, url_db, properties):
     df_cityState = df_cityFill.withColumn("state_prefix", state_prefix(df_cityFill.state))
 
     # write into postgresql
-    df_cityState.write.mode("overwrite").jdbc(
+    df_cityState.write.mode("append").jdbc(
         url=url_db, table="dim_us_city", properties=properties)
 
     # create a state and city variable for dim_city_temp table
@@ -152,7 +152,7 @@ def load_dim_tables(path, spark, url_db, properties):
         "avg(temp)", fahrenheit_udf(F.col("avg(temp)")))
 
     # Write into postgres
-    df_weatherFahrenheit.withColumnRenamed("avg(temp)", "temp").write.mode("overwrite").jdbc(
+    df_weatherFahrenheit.withColumnRenamed("avg(temp)", "temp").write.mode("append").jdbc(
         url=url_db, table="dim_us_weather", properties=properties)
 
     """

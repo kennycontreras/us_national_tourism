@@ -8,6 +8,7 @@ def create_database():
     conn.set_session(autocommit=True)
     cur = conn.cursor()
 
+    print("Creating new database.\n")
     # create sparkify database with UTF8 encoding
     cur.execute("DROP DATABASE IF EXISTS imm_dwh")
     cur.execute("CREATE DATABASE imm_dwh WITH ENCODING 'utf8' TEMPLATE template0")
@@ -23,12 +24,16 @@ def create_database():
 
 
 def drop_tables(cur, conn):
+
+    print("Droping tables if exists.\n")
     for query in drop_table_queries:
         cur.execute(query)
         conn.commit()
 
 
 def create_tables(cur, conn):
+
+    print("Creating tables.\n")
     for query in create_table_queries:
         cur.execute(query)
         conn.commit()
@@ -40,3 +45,4 @@ if __name__ == "__main__":
     drop_tables(cur, conn)
     create_tables(cur, conn)
     conn.close()
+    print("Process completed.")
