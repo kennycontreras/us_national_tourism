@@ -37,7 +37,16 @@ def spark_session():
     return spark
 
 
-def load_dim_tables(path, spark, output, url_db, properties):
+def load_dim_tables(path, spark, url_db, properties):
+    """
+    Functions that load all datasets to build dim tables into a postgres database.
+    Args:
+        path (string): Main path where to read the data
+        spark (object): Spark Session
+        url_db (string): JDBC string to connect db
+        properties (dict): Properties of db connection like user, pass and driver
+    """
+
     """
     *** Code for DIM_US_CITY table. ***
     """
@@ -182,8 +191,17 @@ def load_dim_tables(path, spark, output, url_db, properties):
     print("Process completed.-")
 
 
-def load_fact_table(path, spark, output, url_db, properties):
+def load_fact_table(path, spark, url_db, properties):
     global total_imm_df  # variable for data quality process
+
+    """
+    Functions that load immigration dataset to build a fact table.
+    Args:
+        path (string): Main path where to read the data
+        spark (object): Spark Session
+        url_db (string): JDBC string to connect db
+        properties (dict): Properties of db connection like user, pass and driver
+    """
 
     print("\nExecuting Fact table process.\n")
     df = spark.read.parquet(path + "sas_data")
@@ -236,6 +254,11 @@ def load_fact_table(path, spark, output, url_db, properties):
 
 
 def data_quality(cur):
+    """
+    Execute and validate data quality process into a database.
+    Args:
+        cur (object): Cursor of Postgres connection
+    """
 
     # first data quality
     print("\n1. Executing first data quality check\n")
@@ -279,7 +302,6 @@ def data_quality(cur):
 def main():
 
     main_path = os.getcwd() + "/datasets/"
-    output_data = "s3a://bucket-etl/capstone/"
 
     # spark config connection with postgres db
     url_db = "jdbc:postgresql://127.0.0.1:5432/imm_dwh"
@@ -291,7 +313,7 @@ def main():
 
     spark = spark_session()
     # load_dim_tables(main_path, spark, output_data, url_db, properties)
-    load_fact_table(main_path, spark, output_data, url_db, properties)
+    load_fact_table(main_path, spark, url_db, properties)
     data_quality(cur)
 
     # commit and close connection
