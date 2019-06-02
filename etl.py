@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import configparser
+import psycopg2
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
@@ -10,6 +11,8 @@ from datasets.data import Data
 from datetime import datetime
 from datetime import timedelta
 from dateutil.parser import parse
+from itertools import chain
+from sql_queries import *
 
 # config parser configuration
 config = configparser.ConfigParser()
@@ -18,6 +21,9 @@ config.read_file(open("aws/credentials.cfg"))
 os.environ['AWS_ACCESS_KEY_ID'] = config['AWS']['AWS_ACCESS_KEY_ID']
 os.environ['AWS_SECRET_ACCESS_KEY'] = config['AWS']['AWS_SECRET_ACCESS_KEY']
 os.environ["SPARK_CLASSPATH"] = '~/Documents/jars/postgresql-9.3-1101.jdbc41.jar'
+
+# global variables
+total_imm_df = 0
 
 
 def spark_session():
@@ -35,6 +41,9 @@ def load_dim_tables(path, spark, output, url_db, properties):
     """
     *** Code for DIM_US_CITY table. ***
     """
+
+    print("\nExecuting Dimension tables process.\n")
+    print("This task may take a moment, please wait...")
     # dim_us_city table
     us_city_path = path + "us-cities-demographics.csv"
     df_city = spark.read.format("csv").option(
@@ -170,13 +179,18 @@ def load_dim_tables(path, spark, output, url_db, properties):
                                         for key, value in Data.countries.items()], schema=columns)
 
     df_country.write.mode("overwrite").jdbc(url=url_db, table="dim_country", properties=properties)
+    print("Process completed.-")
 
 
 def load_fact_table(path, spark, output, url_db, properties):
+    global total_imm_df  # variable for data quality process
 
+    print("\nExecuting Fact table process.\n")
     df = spark.read.parquet(path + "sas_data")
 
+    print("Data cleaning process, this may take a moment, please wait...")
     # change arrdate and depdate columns to datetype
+
     epoch = datetime(1960, 1, 1)
     sas_day = udf(lambda x: (timedelta(days=int(x)) + epoch) if x else None, T.DateType())
     df_dateParse = df.withColumn("arrdate", sas_day(df.arrdate))
@@ -213,8 +227,53 @@ def load_fact_table(path, spark, output, url_db, properties):
                    'dep_date', 'dateadd_to', 'state_addr', 'birth_year', 'age', 'gender', 'visa_code', 'visa_type', 'airline']
     df_imm = df_immigration.toDF(*new_columns)
 
+    print("Writing into immigration_us table.")
     # write into postgres
     df_imm.write.mode("append").jdbc(url=url_db, table="immigration_us", properties=properties)
+    print("Process completed.-")
+    # Variable which contains the total rows for the Dataframe, this variable will be useful for a Data Quality process
+    total_imm_df = df_imm.count()
+
+
+def data_quality(cur):
+
+    # first data quality
+    print("\n1. Executing first data quality check\n")
+    cur.execute(select_imm_count)
+    count = cur.fetchall()
+
+    if total_imm_df == count[0][0]:
+        print("Data Quality check passed Successfully!\n\nTotal values in dataframe: {}\nTotal values in table: {}".format(
+            total_imm_df, count[0][0]))
+    else:
+        print("Data Quality check failed! \nTotal values in dataframe: {}\n Total values in table: {}".format(
+            total_imm_df, count[0][0]))
+
+    # second data quality
+    print("\n1. Executing second data quality check\n")
+    cur.execute(select_arrival_date)
+    result = cur.fetchall()
+
+    if result[0][1] > 0 and result[0][1] > result[0][0]:
+        print("Data Quality check passed Successfully!\n\nTotal null values: {}\nTotal not null values: {}".format(
+            result[0][0], result[0][1]))
+    else:
+        print("Data Quality check failed!\n\nTotal null values: {}\n Total not null values: {}".format(
+            result[0][0], result[0][1]))
+
+    # third data quality
+    print("\n1. Executing third data quality check\n")
+    cur.execute(select_year_imm)
+    result_1 = cur.fetchall()
+
+    # check for distint years in dim_us_temp table
+    cur.execute(select_year_weather)
+    result_2 = cur.fetchall()
+
+    if result_1[0][0] in chain.from_iterable(result_2):
+        print("Data Quality check passed Successfully!")
+    else:
+        print("Data Quality check failed!")
 
 
 def main():
@@ -222,12 +281,22 @@ def main():
     main_path = os.getcwd() + "/datasets/"
     output_data = "s3a://bucket-etl/capstone/"
 
+    # spark config connection with postgres db
     url_db = "jdbc:postgresql://127.0.0.1:5432/imm_dwh"
     properties = {"user": "student", "password": "student", "driver": "org.postgresql.Driver"}
 
+    # postgres connection
+    conn = psycopg2.connect("host=127.0.0.1 dbname=imm_dwh user=student password=student")
+    cur = conn.cursor()
+
     spark = spark_session()
-    load_dim_tables(main_path, spark, output_data, url_db, properties)
+    # load_dim_tables(main_path, spark, output_data, url_db, properties)
     load_fact_table(main_path, spark, output_data, url_db, properties)
+    data_quality(cur)
+
+    # commit and close connection
+    conn.commit()
+    conn.close()
 
 
 if __name__ == '__main__':
