@@ -2,9 +2,18 @@
 
 ### Project Summary
 
-This project was built with the goal of providing wide information for analysis purpose about Immigration data of US. The goal is to create and build a Datawarehouse from scratch with clean and structured data that you can apply machine learning models and BI tools to for example know about what kind of visa every immigrant has, which states or port entries receive more immigrants, average period of stay in the US, visa types, etc.
 
-With this information, you can provide an exhaustive analysis about e.g Which state receive more immigrants, which season is the best for travelers based on weather temperature of each state. How many people live in every state or city, airports for each state. You can even apply machine learning models and use this information to promote events or hotel room deals.
+This project provides the data infrastructure for analyzing US Immigration data. The goal was to build a Data Warehouse from scratch with clean and structured data that you can apply machine learning models and Business Information (BI) tools to. Using this data you can answer this question.
+
+‘Understand what type of visa every immigrant has, which states or port entries receive more immigrants, average period of stay in the US, visa types, etc.’
+
+With this data, you can analyze:
+   -    Which states receive more immigrants?
+   -    Which season is the best for travelers based on weather temperature of each state?
+   -    How many people live in every state or city?
+   -    What airports are in each state?
+
+You can also apply machine learning models to this data and use this information to promote events or hotel room deals (for example). 
 
 ![img](https://imgur.com/t7AQGIr.png)
 
