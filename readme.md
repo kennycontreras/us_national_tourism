@@ -1,10 +1,10 @@
-# US National Tourism Data Warehouse from Scratch
+# US National Tourism DataWarehouse from Scratch
 
 ### Project Summary
 
-This project was built with the goal of providing wide information for analyst purpose about Immigration data of US. This Datawarehouse provides clean and structured information about what kind of visa every immigrant has, which states or port entries receive more immigrants, how long it is going to be the period of stay in the US, visa types, etc.
+This project was built with the goal of providing wide information for analysis purpose about Immigration data of US. The goal is to create and build a Datawarehouse from scratch with clean and structured data that you can apply machine learning models and BI tools to for example know about what kind of visa every immigrant has, which states or port entries receive more immigrants, average period of stay in the US, visa types, etc.
 
-With this information, you can provide an exhaustive analysis about e.g Which state receive more immigrants, which season is the best for travelers based on weather temperature of each state. How many people live in every state or city, airports for each state. You can even apply prediction models to know how many immigrants will the US receive on a specific day based on weather conditions.
+With this information, you can provide an exhaustive analysis about e.g Which state receive more immigrants, which season is the best for travelers based on weather temperature of each state. How many people live in every state or city, airports for each state. You can even apply machine learning models and use this information to promote events or hotel room deals.
 
 ![img](https://imgur.com/t7AQGIr.png)
 
@@ -50,7 +50,7 @@ List of datasets used in this project:
 ### Database Model
 
 
-![img](https://imgur.com/AISwbAs.png)
+![img](https://imgur.com/MyyU2Yz.png)
 
 
 ## Getting Started
@@ -58,18 +58,18 @@ List of datasets used in this project:
 To execute this project successfully we have two options
 The first one is to execute cell by cell of this notebook. The second option is to execute a series of scripts created to accomplish the same as this notebook but without all analysis made it here.
 
-### Jupyter Notebook option
+### 1. Jupyter Notebook option
 
-- This is pretty straightforward, we can accomplish this executing cell by cell of this notebook but first, we need to execute a few files to create a database and tables for this project.
+This is pretty straightforward, we can accomplish this executing cell by cell of this notebook but first, we need to execute a few files to create a database and tables for this project.
 I recommend executing this project following this notebook because this provides wide information about why we choose some clean methods, how we solve null values, columns, pivot, etc.
 This will give you more information about how we approached every step of this project.
 
 1. Execute `create_tables.py`: This file creates a database called `imm_dwh` and all tables used in this project.
 2. After that, we can execute all cells of this notebook without a problem.
 
-### Python script option
+### 2. Python script option
 
-- As we said before, we can accomplish the same goal executing a series of python files, the unique difference is that in the script we don't implement analysis methods like print a Dataframe after every clean process. That's the main difference with the Jupyter notebook option.
+As we said before, we can accomplish the same goal executing a series of python files, the unique difference is that in the script we don't implement analysis methods like print a Dataframe after every clean process. That's the main difference with the Jupyter notebook option.
 
 1. Execute `create_tables.py`: This file creates a database called `imm_dwh` and all tables used in this project.
 2. Execute `etl.py`: This file executes the ETL pipeline to build and write into all tables of the Datawarehouse.
@@ -87,7 +87,7 @@ This will give you more information about how we approached every step of this p
 
 __Apache Spark__
 
-We choose to work with Spark having in mind the scalability that may upcoming from our dataset and have the ability to transform data quickly at scale. For example, Pandas in an amazing library and you can accomplish pretty much all of this code using it but is most suitable for working with data that fits into one single machine. So what can happen if we want to process data for 2016, 2017, 2018, 2019? That's not a good approach for Pandas library. This is when Spark shine. Spark will help us to distribute over the cluster doing all tasks faster and without bottleneck. At the moment we're just running a spark job on-premises but we can deploy this on EC2 and take all advantages of AWS.
+We choose to work with Spark having in mind the scalability that may upcoming from our dataset and have the ability to transform data quickly at scale. For example, Pandas is an amazing library and you can accomplish pretty much all of this project using it but is most suitable for working with data that fits into one single machine. So what can happen if we want to process data for 2016, 2017, 2018, 2019? That's not a good approach for Pandas library. This is when Spark shine. Spark will help us to distribute over the cluster doing all tasks faster and without bottleneck. At the moment we're just running a spark job on-premises but we can deploy this on EC2 and take all advantages of AWS.
 
 Another reason of why we choose Spark is his impressive Machine Learning library MLib. This project was created having in mind to build a structured Datawarehouse suitable for Analysis and Machine Learning. So if the company wants to make use of all this data and apply Machine Learning models, Spark is the best choice.
 
@@ -97,7 +97,7 @@ __PostgreSQL__
 
 Postgres provide an excellent synergy with Spark. You can write a Spark Dataframe into a Postgres database without the necessity to create a table.
 
-Postgres is a relational database, this fits perfectly with the scope of the project and if in the future we want to migrate the entire database into AWS, Amazon Redshift was built based on Postgres 8.0.2, so this provides less work and problems if we have to implement constraints, triggers, stored procedures, etc. It's relevant to say that the syntax of queries is the same too.
+Postgres is a relational database, this fits perfectly with the scope of the project and if we want to migrate in the future the entire database into AWS, Amazon Redshift was built based on Postgres 8.0.2, so this provides less work and problems to implement constraints, triggers, stored procedures, etc. It's relevant to say that the syntax of queries is the same too.
 
 
 * __How often the data should be updated and why?__
@@ -108,15 +108,14 @@ Immigration and weather tables can be updated one time a day, why? because the w
 
 The other datasets like city population, airport and states can be updated one or two times a year. We need to have in mind that this dataset doesn't change in a long time. The next Census is scheduled to 2020, so the period of an update is relatively long compared to the other datasets.
 
-
 * __How to approach the problem differently under the following scenarios:__
  * __The data was increased by 100x.__
 
-This project is actually running on a single machine. If the data increase by 100x, first of all, we need to migrate the data to the cloud. A good approach is to use EMR on AWS, the idea is to execute this notebook, save the data in parquet files into an S3 bucket and provide information for BI tools and machine learning models.
+ This project is actually running on a single machine. If the data increase by 100x, first of all, we need to migrate the data to the cloud. A good approach is to use EMR on AWS, the idea is to execute this notebook, save the data in parquet files into an S3 bucket and provide information for BI tools and machine learning models.
 
-One of the benefits of implementing EMR is the pricing, we pay per-instant rate for every second used. This means that we don't have to be running EC2 machines 24hours daily to execute a job 1 hour a day. We just pay for the hour of service used.
+ One of the benefits of implementing EMR is the pricing, we pay per-instant rate for every second used. This means that we don't have to be running EC2 machines 24hours daily to execute a job 1 hour a day. We just pay for the hour of service used.
 
-Another benefit is his auto-scaling. We can provide one or thousands of compute instances to process the data. We can increase or decrease the number of nodes manually or with auto-scaling. This is a good deal is we are not totally sure about how many nodes we need to process the data. This also means that we spend less time tuning and monitoring the clusters.
+ Another benefit is his auto-scaling. We can provide one or thousands of compute instances to process the data. We can increase or decrease the number of nodes manually or with auto-scaling. This is a good deal is we are not totally sure about how many nodes we need to process the data. This also means that we spend less time tuning and monitoring the clusters.
 
 
 ![img](https://imgur.com/ZNvwLu1.png)
