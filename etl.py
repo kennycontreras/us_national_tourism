@@ -273,7 +273,7 @@ def data_quality(cur):
             total_imm_df, count[0][0]))
 
     # second data quality
-    print("\n1. Executing second data quality check\n")
+    print("\n2. Executing second data quality check\n")
     cur.execute(select_arrival_date)
     result = cur.fetchall()
 
@@ -285,7 +285,7 @@ def data_quality(cur):
             result[0][0], result[0][1]))
 
     # third data quality
-    print("\n1. Executing third data quality check\n")
+    print("\n3. Executing third data quality check\n")
     cur.execute(select_year_imm)
     result_1 = cur.fetchall()
 
@@ -312,7 +312,7 @@ def main():
     cur = conn.cursor()
 
     spark = spark_session()
-    # load_dim_tables(main_path, spark, output_data, url_db, properties)
+    load_dim_tables(main_path, spark, url_db, properties)
     load_fact_table(main_path, spark, url_db, properties)
     data_quality(cur)
 
